@@ -7,17 +7,11 @@ import { Activity, TrendingUp, AlertCircle } from 'lucide-react';
 const App = () => {
   const [ticker, setTicker] = useState('NVDA');
   const [analysis, setAnalysis] = useState(null);
-  const [metrics, setMetrics] = useState({ accuracy: 0, precision: 0 });
   const [news, setNews] = useState("");
   const [articles, setArticles] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
 
   useEffect(() => {
-    // Load Metrics
-    axios.get('http://localhost:8000/metrics')
-      .then(res => setMetrics(res.data))
-      .catch(err => console.error(err));
-
     // Initial News Fetch
     fetchNews(ticker);
   }, []);
@@ -67,16 +61,7 @@ const App = () => {
             Sentimetrix-TCN
           </h1>
         </div>
-        <div className="flex gap-6 text-sm">
-          <div className="flex items-center gap-2 text-emerald-400">
-            <Activity size={16} />
-            <span>Model Accuracy: {(metrics.accuracy * 100).toFixed(1)}%</span>
-          </div>
-          <div className="flex items-center gap-2 text-blue-400">
-            <TrendingUp size={16} />
-            <span>Precision: {(metrics.precision * 100).toFixed(1)}%</span>
-          </div>
-        </div>
+        {/* Metrics removed as per user request */}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
