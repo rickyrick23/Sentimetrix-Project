@@ -6,14 +6,15 @@ import { Activity, TrendingUp, AlertCircle } from 'lucide-react';
 
 const App = () => {
   const [ticker, setTicker] = useState('NVDA');
+  const [activeTicker, setActiveTicker] = useState('NVDA'); // New state for the dashboard
   const [analysis, setAnalysis] = useState(null);
   const [news, setNews] = useState("");
   const [articles, setArticles] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
 
   useEffect(() => {
-    // Initial News Fetch
-    fetchNews(ticker);
+    // Initial Analysis to populate the dashboard
+    runAnalysis();
   }, []);
 
   const fetchNews = async (symbol) => {
@@ -33,21 +34,40 @@ const App = () => {
     setTicker(e.target.value.toUpperCase());
   };
 
-  const handleTickerBlur = () => {
-    if (ticker) fetchNews(ticker);
-  };
+  // Removed onBlur fetch to avoid confusion, or keep it? 
+  // User wants "graph changes" only on click. 
+  // Let's fetch news ONLY when user clicks, OR we can keep onBlur for "Context" but use activeTicker for graph.
+  // To be safe and clean, let's just do everything on "Run Analysis".
 
   const runAnalysis = async () => {
+    // 1. Update the Active Ticker for the UI
+    setActiveTicker(ticker);
+    setLoadingNews(true); // Show loading while everything updates
+
+    // 2. Fetch News & Run Analysis
     try {
+      // Fetch news for the NEW ticker first
+      const newsRes = await axios.get(`http://localhost:8000/news/${ticker}`);
+      const latestArticles = newsRes.data.articles;
+      const latestContext = newsRes.data.context;
+
+      setArticles(latestArticles);
+      setNews(latestContext);
+
+      // Now Run Analysis
       const res = await axios.post('http://localhost:8000/analyze', {
         ticker: ticker,
-        news_context: news
+        news_context: latestContext
       });
+
       setAnalysis(res.data);
       if (res.data.news_context_used) setNews(res.data.news_context_used);
+
     } catch (err) {
       console.error(err);
       alert("Analysis failed. Backend online?");
+    } finally {
+      setLoadingNews(false);
     }
   };
 
@@ -61,7 +81,6 @@ const App = () => {
             Sentimetrix-TCN
           </h1>
         </div>
-        {/* Metrics removed as per user request */}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -74,7 +93,6 @@ const App = () => {
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 value={ticker}
                 onChange={handleTickerChange}
-                onBlur={handleTickerBlur}
                 placeholder="Ticker (e.g. AAPL)"
               />
             </div>
@@ -134,14 +152,14 @@ const App = () => {
             </>
           )}
 
-          {/* Charts */}
-          <DeepChart ticker={ticker} />
+          {/* Charts - Uses activeTicker to ensure it doesn't change until analysis runs */}
+          <DeepChart ticker={activeTicker} />
         </div>
 
-        {/* Sentiment Analysis Sidebar (Replaces AI Analyst) */}
+        {/* Sentiment Analysis Sidebar (Replaces AI Analyst) - Uses activeTicker */}
         <div className="w-96 border-l border-slate-800 bg-slate-900 flex-shrink-0">
           <SentimentPanel
-            ticker={ticker}
+            ticker={activeTicker}
             sentiment={analysis?.sentiment}
             articles={articles}
             loading={loadingNews}
