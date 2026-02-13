@@ -10,7 +10,7 @@ import json
 # Add project root to sys.path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.data_fetcher import get_alpha_live_data
+from src.data_fetcher import get_alpha_live_data, search_ticker
 from src.rag_retriever import build_research_index, retrieve_alpha_context, embedder
 from src.model_engine import SentimetrixTCN, predict_signal
 from src.intelligence_engine import IntelligenceEngine
@@ -87,9 +87,9 @@ def health_check():
 def get_market_data(ticker: str):
     """Fetch live data, RSI, MACD"""
     try:
-        df, kpis = get_alpha_live_data(ticker)
+        df, kpis, resolved_ticker = get_alpha_live_data(ticker)
         if df.empty:
-            raise HTTPException(status_code=404, detail="Ticker not found")
+            raise HTTPException(status_code=404, detail=f"Ticker '{ticker}' not found (and search failed).")
         
         # Convert last 100 rows to JSON friendly format
         # Ensure date column is named 'date' for Recharts
@@ -99,7 +99,8 @@ def get_market_data(ticker: str):
         # Handle datetime conversion if needed (pandas validation)
         
         return {
-            "ticker": ticker,
+            "ticker": resolved_ticker, # Return the ACTUAL ticker found
+            "original_ticker": ticker,
             "kpis": kpis,
             "history": history
         }
@@ -110,7 +111,11 @@ def get_market_data(ticker: str):
 def get_news(ticker: str):
     """Fetch live news context and articles"""
     try:
-        context, articles = news_engine.fetch_company_news(ticker)
+        # Resolve ticker for better matching (e.g. "Bitcoin" -> "BTC-USD")
+        resolved = search_ticker(ticker)
+        query_ticker = resolved if resolved else ticker
+        
+        context, articles = news_engine.fetch_company_news(query_ticker)
         return {"context": context, "articles": articles}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -120,12 +125,19 @@ def analyze_stock(req: AnalysisRequest):
     """Run TCN + RAG + Sentiment Analysis"""
     try:
         # Fetch Data
-        df, _ = get_alpha_live_data(req.ticker)
+        df, _, resolved_ticker = get_alpha_live_data(req.ticker)
         
+        if df.empty:
+             raise HTTPException(status_code=404, detail=f"Ticker '{req.ticker}' data not found.")
+
         # Determine Context: Use provided or fetch live
         news_context = req.news_context
         if not news_context:
-            news_context, _ = news_engine.fetch_company_news(req.ticker)
+            # Fetch news for the RESOLVED ticker if possible, or original?
+            # If resolved is "BTC-USD", fetching news for "BTC-USD" on Google News might be weird?
+            # "Bitcoin USD"?
+            # News engine logic is separate. Let's try resolved ticker first.
+            news_context, _ = news_engine.fetch_company_news(resolved_ticker)
             
         if not news_context or news_context == "No recent news found.":
              news_context = "Market volatility observed in the sector."
@@ -143,6 +155,7 @@ def analyze_stock(req: AnalysisRequest):
         sentiment = sentiment_engine.analyze(news_context)
         
         return {
+            "ticker": resolved_ticker, # Inform UI of the actual ticker used
             "signal_class": pred_class,
             "confidence": conf,
             "rules_triggered": rules,
