@@ -8,7 +8,8 @@ import joblib
 import json
 
 # Add project root to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(PROJECT_ROOT)
 
 from src.data_fetcher import get_alpha_live_data, search_ticker
 from src.rag_retriever import build_research_index, retrieve_alpha_context, embedder
@@ -42,15 +43,18 @@ def load_assets():
     try:
         # 1. TCN Model
         model = SentimetrixTCN(input_size=19)
-        if os.path.exists("models/alpha_weights.pth"):
-            model.load_state_dict(torch.load("models/alpha_weights.pth"))
+        model_path = os.path.join(PROJECT_ROOT, "models", "alpha_weights.pth")
+        if os.path.exists(model_path):
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model.load_state_dict(torch.load(model_path, map_location=device))
             model.eval()
         else:
             print("Warning: No weights found.")
             
         # 2. Scaler
-        if os.path.exists("models/scaler.pkl"):
-            scaler = joblib.load("models/scaler.pkl")
+        scaler_path = os.path.join(PROJECT_ROOT, "models", "scaler.pkl")
+        if os.path.exists(scaler_path):
+            scaler = joblib.load(scaler_path)
             
         # 3. RAG Index
         index = build_research_index()
@@ -180,7 +184,8 @@ def chat_analyst(req: ChatRequest):
 def get_metrics():
     """Return model accuracy/precision (static/simulated or read from file)"""
     metrics = {"accuracy": 0.47, "precision": 0.50}
-    if os.path.exists("metrics.json"):
-        with open("metrics.json", "r") as f:
+    metrics_path = os.path.join(PROJECT_ROOT, "metrics.json")
+    if os.path.exists(metrics_path):
+        with open(metrics_path, "r") as f:
             metrics = json.load(f)
     return metrics
