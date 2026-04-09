@@ -12,9 +12,13 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
 from src.data_fetcher import get_alpha_live_data, search_ticker
-from src.rag_retriever import build_research_index, retrieve_alpha_context, embedder
+# ❌ Removed FAISS heavy import
+# from src.rag_retriever import build_research_index, retrieve_alpha_context, embedder
+
 from src.model_engine import SentimetrixTCN, predict_signal
-from src.intelligence_engine import IntelligenceEngine
+# ❌ Removed LLM heavy import
+# from src.intelligence_engine import IntelligenceEngine
+
 from src.sentiment_engine import SentimentEngine
 from src.news_engine import NewsEngine
 
@@ -31,45 +35,35 @@ app.add_middleware(
 
 # --- Global Assets ---
 model = None
-index = None
 scaler = None
-llm = None
 sentiment_engine = None
 news_engine = None
 
 
-# ✅ SAFE LAZY LOADER
-def safe_load_assets(load_model=True, load_llm=True):
-    global model, index, scaler, llm, sentiment_engine, news_engine
+# ✅ SAFE LAZY LOADER (LIGHT VERSION)
+def safe_load_assets():
+    global model, scaler, sentiment_engine, news_engine
 
     try:
-        # MODEL + SCALER
-        if load_model:
-            if model is None:
-                print("Loading model...")
-                model_path = os.path.join(PROJECT_ROOT, "models", "alpha_weights.pth")
-                model = SentimetrixTCN(input_size=19)
-                if os.path.exists(model_path):
-                    device = torch.device("cpu")  # force CPU
-                    model.load_state_dict(torch.load(model_path, map_location=device))
-                    model.eval()
+        # MODEL
+        if model is None:
+            print("Loading model...")
+            model_path = os.path.join(PROJECT_ROOT, "models", "alpha_weights.pth")
+            model = SentimetrixTCN(input_size=19)
 
-            if scaler is None:
-                print("Loading scaler...")
-                scaler_path = os.path.join(PROJECT_ROOT, "models", "scaler.pkl")
-                if os.path.exists(scaler_path):
-                    scaler = joblib.load(scaler_path)
+            if os.path.exists(model_path):
+                device = torch.device("cpu")
+                model.load_state_dict(torch.load(model_path, map_location=device))
+                model.eval()
 
-            if index is None:
-                print("Loading FAISS index...")
-                index = build_research_index()
+        # SCALER
+        if scaler is None:
+            print("Loading scaler...")
+            scaler_path = os.path.join(PROJECT_ROOT, "models", "scaler.pkl")
+            if os.path.exists(scaler_path):
+                scaler = joblib.load(scaler_path)
 
-        # LLM
-        if load_llm and llm is None:
-            print("Loading LLM...")
-            llm = IntelligenceEngine()
-
-        # Sentiment + News (lightweight)
+        # LIGHT COMPONENTS
         if sentiment_engine is None:
             sentiment_engine = SentimentEngine()
 
@@ -106,7 +100,12 @@ def get_market_data(ticker: str):
         df, kpis, resolved_ticker = get_alpha_live_data(ticker)
 
         if df.empty:
-            raise HTTPException(status_code=404, detail="Ticker not found")
+            return {
+                "ticker": ticker,
+                "error": "Data unavailable",
+                "history": [],
+                "kpis": {}
+            }
 
         df_history = df.tail(100).reset_index()
         df_history.rename(columns={'index': 'date', 'Date': 'date'}, inplace=True)
@@ -125,7 +124,7 @@ def get_market_data(ticker: str):
 @app.get("/news/{ticker}")
 def get_news(ticker: str):
     try:
-        safe_load_assets(load_model=False, load_llm=False)
+        safe_load_assets()
 
         resolved = search_ticker(ticker)
         query_ticker = resolved if resolved else ticker
@@ -140,7 +139,7 @@ def get_news(ticker: str):
 @app.post("/analyze")
 def analyze_stock(req: AnalysisRequest):
     try:
-        safe_load_assets(load_model=True, load_llm=False)
+        safe_load_assets()
 
         df, _, resolved_ticker = get_alpha_live_data(req.ticker)
 
@@ -154,10 +153,11 @@ def analyze_stock(req: AnalysisRequest):
         if not news_context:
             news_context = "Market volatility observed."
 
-        rules = retrieve_alpha_context(news_context, index)
+        # ✅ Replace FAISS with simple rules
+        rules = ["Technical indicators applied", "Market trend analyzed"]
 
         if scaler:
-            pred_class, conf, weights = predict_signal(model, df, rules, embedder, scaler)
+            pred_class, conf, weights = predict_signal(model, df, rules, None, scaler)
         else:
             raise HTTPException(status_code=500, detail="Scaler not loaded")
 
@@ -178,20 +178,8 @@ def analyze_stock(req: AnalysisRequest):
 
 @app.post("/chat")
 def chat_analyst(req: ChatRequest):
-    try:
-        safe_load_assets(load_model=False, load_llm=True)
-
-        response = llm.generate_analysis(
-            context_rules=[req.context],
-            technical_signal=req.signal,
-            ticker=req.ticker,
-            user_query=req.query
-        )
-
-        return {"response": response}
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    # ❌ LLM disabled for free tier
+    return {"response": "Chat disabled on free tier to save memory"}
 
 
 @app.get("/metrics")
