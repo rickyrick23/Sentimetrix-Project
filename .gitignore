@@ -41,13 +41,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Models & Data (Large Files)
-models/*.pth
-models/*.bin
-models/*.pt
-*.pkl
-data/
-
 # IDE / Editor
 .vscode/
 .idea/
