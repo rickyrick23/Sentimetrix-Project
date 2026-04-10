@@ -12,13 +12,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
 from src.data_fetcher import get_alpha_live_data, search_ticker
-# ❌ Removed FAISS heavy import
-# from src.rag_retriever import build_research_index, retrieve_alpha_context, embedder
-
 from src.model_engine import SentimetrixTCN, predict_signal
-# ❌ Removed LLM heavy import
-# from src.intelligence_engine import IntelligenceEngine
-
 from src.sentiment_engine import SentimentEngine
 from src.news_engine import NewsEngine
 
@@ -40,7 +34,7 @@ sentiment_engine = None
 news_engine = None
 
 
-# ✅ SAFE LAZY LOADER (LIGHT VERSION)
+# ✅ SAFE LAZY LOADER (LIGHT + SAFE)
 def safe_load_assets():
     global model, scaler, sentiment_engine, news_engine
 
@@ -118,7 +112,13 @@ def get_market_data(ticker: str):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "ticker": ticker,
+            "error": "Market data failed",
+            "details": str(e),
+            "history": [],
+            "kpis": {}
+        }
 
 
 @app.get("/news/{ticker}")
@@ -133,7 +133,11 @@ def get_news(ticker: str):
         return {"context": context, "articles": articles}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "context": "No news available",
+            "articles": [],
+            "error": str(e)
+        }
 
 
 @app.post("/analyze")
@@ -143,25 +147,45 @@ def analyze_stock(req: AnalysisRequest):
 
         df, _, resolved_ticker = get_alpha_live_data(req.ticker)
 
-        if df.empty:
-            raise HTTPException(status_code=404, detail="Ticker data not found")
+        # ✅ FAST SAFE RETURN (prevents timeout)
+        if df.empty or len(df) < 30:
+            return {
+                "ticker": req.ticker,
+                "signal_class": "HOLD",
+                "confidence": 0.5,
+                "rules_triggered": ["Insufficient or unavailable data"],
+                "sentiment": "neutral",
+                "news_context_used": "No data"
+            }
 
+        # NEWS (safe)
         news_context = req.news_context
         if not news_context:
-            news_context, _ = news_engine.fetch_company_news(resolved_ticker)
+            try:
+                news_context, _ = news_engine.fetch_company_news(resolved_ticker)
+            except:
+                news_context = "Market conditions normal"
 
-        if not news_context:
-            news_context = "Market volatility observed."
+        # LIGHT RULES
+        rules = ["Technical indicators applied"]
 
-        # ✅ Replace FAISS with simple rules
-        rules = ["Technical indicators applied", "Market trend analyzed"]
-
-        if scaler:
+        # MODEL PREDICTION
+        if scaler and model:
             pred_class, conf, weights = predict_signal(model, df, rules, None, scaler)
         else:
-            raise HTTPException(status_code=500, detail="Scaler not loaded")
+            return {
+                "ticker": req.ticker,
+                "signal_class": "HOLD",
+                "confidence": 0.5,
+                "rules_triggered": ["Model not ready"],
+                "sentiment": "neutral"
+            }
 
-        sentiment = sentiment_engine.analyze(news_context)
+        # SENTIMENT (safe)
+        try:
+            sentiment = sentiment_engine.analyze(news_context)
+        except:
+            sentiment = "neutral"
 
         return {
             "ticker": resolved_ticker,
@@ -173,12 +197,19 @@ def analyze_stock(req: AnalysisRequest):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # ✅ NEVER FAIL → ALWAYS RETURN
+        return {
+            "ticker": req.ticker,
+            "signal_class": "HOLD",
+            "confidence": 0.5,
+            "rules_triggered": ["Fallback triggered"],
+            "sentiment": "neutral",
+            "error": str(e)
+        }
 
 
 @app.post("/chat")
 def chat_analyst(req: ChatRequest):
-    # ❌ LLM disabled for free tier
     return {"response": "Chat disabled on free tier to save memory"}
 
 
