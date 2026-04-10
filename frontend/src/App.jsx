@@ -4,25 +4,27 @@ import SentimentPanel from './components/SentimentPanel';
 import axios from 'axios';
 import { Activity, TrendingUp, AlertCircle } from 'lucide-react';
 
+// ✅ LIVE BACKEND URL
+const API_BASE = "https://sentimetrix-project.onrender.com";
+
 const App = () => {
   const [ticker, setTicker] = useState('NVDA');
-  const [activeTicker, setActiveTicker] = useState('NVDA'); // New state for the dashboard
+  const [activeTicker, setActiveTicker] = useState('NVDA');
   const [analysis, setAnalysis] = useState(null);
   const [news, setNews] = useState("");
   const [articles, setArticles] = useState([]);
   const [loadingNews, setLoadingNews] = useState(false);
 
   useEffect(() => {
-    // Initial Analysis to populate the dashboard
     runAnalysis();
   }, []);
 
   const fetchNews = async (symbol) => {
     setLoadingNews(true);
     try {
-      const res = await axios.get(`http://localhost:8000/news/${symbol}`);
+      const res = await axios.get(`${API_BASE}/news/${symbol}`);
       setArticles(res.data.articles);
-      setNews(res.data.context); // Auto-populate context for analysis
+      setNews(res.data.context);
     } catch (err) {
       console.error("News fetch error:", err);
     } finally {
@@ -34,28 +36,21 @@ const App = () => {
     setTicker(e.target.value.toUpperCase());
   };
 
-  // Removed onBlur fetch to avoid confusion, or keep it? 
-  // User wants "graph changes" only on click. 
-  // Let's fetch news ONLY when user clicks, OR we can keep onBlur for "Context" but use activeTicker for graph.
-  // To be safe and clean, let's just do everything on "Run Analysis".
-
   const runAnalysis = async () => {
-    // 1. Update the Active Ticker for the UI
     setActiveTicker(ticker);
-    setLoadingNews(true); // Show loading while everything updates
+    setLoadingNews(true);
 
-    // 2. Fetch News & Run Analysis
     try {
-      // Fetch news for the NEW ticker first
-      const newsRes = await axios.get(`http://localhost:8000/news/${ticker}`);
+      // ✅ Fetch news
+      const newsRes = await axios.get(`${API_BASE}/news/${ticker}`);
       const latestArticles = newsRes.data.articles;
       const latestContext = newsRes.data.context;
 
       setArticles(latestArticles);
       setNews(latestContext);
 
-      // Now Run Analysis
-      const res = await axios.post('http://localhost:8000/analyze', {
+      // ✅ Run analysis
+      const res = await axios.post(`${API_BASE}/analyze`, {
         ticker: ticker,
         news_context: latestContext
       });
@@ -73,7 +68,7 @@ const App = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col font-sans">
-      {/* Navbar / Metric Banner */}
+      {/* Navbar */}
       <div className="bg-slate-900 border-b border-slate-800 p-4 flex justify-between items-center sticky top-0 z-10 shadow-md">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold">SM</div>
@@ -86,16 +81,15 @@ const App = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content */}
         <div className="flex-1 p-6 overflow-y-auto">
+
           {/* Controls */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="relative">
-              <input
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                value={ticker}
-                onChange={handleTickerChange}
-                placeholder="Ticker (e.g. AAPL)"
-              />
-            </div>
+            <input
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 outline-none"
+              value={ticker}
+              onChange={handleTickerChange}
+              placeholder="Ticker (e.g. AAPL)"
+            />
 
             <button
               onClick={runAnalysis}
@@ -105,59 +99,57 @@ const App = () => {
             </button>
           </div>
 
-          {/* Analysis Context Area (Auto-filled but editable) - Kept Compact */}
+          {/* Context */}
           <details className="mb-6">
-            <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300 select-none">View/Edit Analysis Context</summary>
+            <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-300">
+              View/Edit Analysis Context
+            </summary>
             <textarea
-              className="w-full mt-2 bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs text-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
+              className="w-full mt-2 bg-slate-800 border border-slate-700 rounded-lg p-3 text-xs text-slate-300"
               rows={2}
               value={news}
               onChange={e => setNews(e.target.value)}
-              placeholder="AI Context..."
             />
           </details>
 
-          {/* Dashboard Grid */}
+          {/* Dashboard */}
           {analysis && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* Signal Card - Expanded Width since there are only 2 items now */}
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl relative overflow-hidden">
-                  <div className={`absolute top-0 right-0 p-2 ${analysis.signal_class === 2 ? 'bg-emerald-500' : analysis.signal_class === 0 ? 'bg-red-500' : 'bg-gray-500'} bg-opacity-20 text-xs font-bold rounded-bl-xl`}>
-                    CONFIDENCE: {analysis.confidence.toFixed(1)}%
-                  </div>
-                  <h3 className="text-slate-400 text-sm font-semibold mb-2">INTELLIGENCE SIGNAL</h3>
-                  <div className={`text-4xl font-extrabold ${analysis.signal_class === 2 ? 'text-emerald-400' : analysis.signal_class === 0 ? 'text-red-400' : 'text-gray-200'}`}>
-                    {analysis.signal_class === 2 ? 'STRONG BUY' : analysis.signal_class === 0 ? 'STRONG SELL' : 'HOLD / NEUTRAL'}
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
 
-                {/* Key Drivers (RAG) - Replaces the Sentiment Card which moved to sidebar */}
-                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl overflow-y-auto max-h-48 scrollbar-thin scrollbar-thumb-slate-600">
-                  <h3 className="text-slate-400 text-sm font-semibold mb-2">KEY DRIVERS (RAG)</h3>
-                  <ul className="text-sm text-slate-300 space-y-2">
-                    {analysis.rules_triggered && analysis.rules_triggered.length > 0 ? (
-                      analysis.rules_triggered.map((rule, idx) => (
-                        <li key={idx} className="flex gap-2">
-                          <span className="text-blue-400">•</span>
-                          {rule}
-                        </li>
-                      ))
-                    ) : (
-                      <li className="italic text-slate-500">No specific expert rules triggered.</li>
-                    )}
-                  </ul>
+              {/* Signal */}
+              <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 className="text-slate-400 text-sm mb-2">INTELLIGENCE SIGNAL</h3>
+                <div className="text-4xl font-extrabold">
+                  {analysis.signal_class === 2
+                    ? 'STRONG BUY'
+                    : analysis.signal_class === 0
+                      ? 'STRONG SELL'
+                      : 'HOLD'}
                 </div>
+                <p className="mt-2 text-sm text-slate-400">
+                  Confidence: {analysis.confidence?.toFixed(1)}%
+                </p>
               </div>
-            </>
+
+              {/* Rules */}
+              <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
+                <h3 className="text-slate-400 text-sm mb-2">KEY DRIVERS</h3>
+                <ul className="text-sm space-y-2">
+                  {analysis.rules_triggered?.map((rule, idx) => (
+                    <li key={idx}>• {rule}</li>
+                  ))}
+                </ul>
+              </div>
+
+            </div>
           )}
 
-          {/* Charts - Uses activeTicker to ensure it doesn't change until analysis runs */}
+          {/* Chart */}
           <DeepChart ticker={activeTicker} />
         </div>
 
-        {/* Sentiment Analysis Sidebar (Replaces AI Analyst) - Uses activeTicker */}
-        <div className="w-96 border-l border-slate-800 bg-slate-900 flex-shrink-0">
+        {/* Sidebar */}
+        <div className="w-96 border-l border-slate-800 bg-slate-900">
           <SentimentPanel
             ticker={activeTicker}
             sentiment={analysis?.sentiment}
