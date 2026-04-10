@@ -14,7 +14,7 @@ import axios from 'axios';
 import { Loader2 } from 'lucide-react';
 
 // ✅ Backend URL
-const API_BASE = "https://sentimetrix-project.onrender.com";
+const API_BASE = "https://rickyrick23-sentimetrix-api.hf.space";
 
 const DeepChart = ({ ticker }) => {
     const [data, setData] = useState([]);

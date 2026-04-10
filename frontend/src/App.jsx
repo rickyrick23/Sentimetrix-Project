@@ -5,7 +5,7 @@ import axios from 'axios';
 import { Activity, TrendingUp, AlertCircle } from 'lucide-react';
 
 // ✅ LIVE BACKEND URL
-const API_BASE = "https://sentimetrix-project.onrender.com";
+const API_BASE = "https://rickyrick23-sentimetrix-api.hf.space";
 
 const App = () => {
   const [ticker, setTicker] = useState('NVDA');

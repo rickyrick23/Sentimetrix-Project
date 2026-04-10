@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Send, Bot, User } from 'lucide-react';
 
 // ✅ LIVE BACKEND
-const API_BASE = "https://sentimetrix-project.onrender.com";
+const API_BASE = "https://rickyrick23-sentimetrix-api.hf.space";
 
 const AIAnalyst = ({ ticker, context, signal }) => {
     const [messages, setMessages] = useState([
@@ -59,8 +59,8 @@ const AIAnalyst = ({ ticker, context, signal }) => {
                 {messages.map((m, i) => (
                     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] p-3 rounded-xl ${m.role === 'user'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-700 text-slate-200'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-700 text-slate-200'
                             }`}>
                             <div className="flex items-center gap-2 mb-1 opacity-50 text-xs">
                                 {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
