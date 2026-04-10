@@ -34,7 +34,7 @@ sentiment_engine = None
 news_engine = None
 
 
-# ✅ SAFE LAZY LOADER (LIGHT + SAFE)
+# ✅ SAFE LAZY LOADER (ONLY WHEN NEEDED)
 def safe_load_assets():
     global model, scaler, sentiment_engine, news_engine
 
@@ -57,7 +57,7 @@ def safe_load_assets():
             if os.path.exists(scaler_path):
                 scaler = joblib.load(scaler_path)
 
-        # LIGHT COMPONENTS
+        # LIGHT COMPONENTS ONLY
         if sentiment_engine is None:
             sentiment_engine = SentimentEngine()
 
@@ -85,7 +85,11 @@ class ChatRequest(BaseModel):
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "system": "Sentimetrix-TCN"}
+    return {
+        "status": "online",
+        "message": "Backend is alive",
+        "note": "Use /market-data or /analyze"
+    }
 
 
 @app.get("/market-data/{ticker}")
@@ -101,7 +105,7 @@ def get_market_data(ticker: str):
                 "kpis": {}
             }
 
-        df_history = df.tail(100).reset_index()
+        df_history = df.tail(50).reset_index()
         df_history.rename(columns={'index': 'date', 'Date': 'date'}, inplace=True)
 
         return {
@@ -124,13 +128,21 @@ def get_market_data(ticker: str):
 @app.get("/news/{ticker}")
 def get_news(ticker: str):
     try:
-        safe_load_assets()
+        global news_engine
+
+        # ✅ Only load news engine (lightweight)
+        if news_engine is None:
+            news_engine = NewsEngine()
 
         resolved = search_ticker(ticker)
         query_ticker = resolved if resolved else ticker
 
         context, articles = news_engine.fetch_company_news(query_ticker)
-        return {"context": context, "articles": articles}
+
+        return {
+            "context": context,
+            "articles": articles
+        }
 
     except Exception as e:
         return {
@@ -143,11 +155,15 @@ def get_news(ticker: str):
 @app.post("/analyze")
 def analyze_stock(req: AnalysisRequest):
     try:
-        safe_load_assets()
+        global model, scaler
+
+        # ✅ Load only when needed
+        if model is None or scaler is None:
+            safe_load_assets()
 
         df, _, resolved_ticker = get_alpha_live_data(req.ticker)
 
-        # ✅ FAST SAFE RETURN (prevents timeout)
+        # ✅ FAST RETURN (prevents timeout)
         if df.empty or len(df) < 30:
             return {
                 "ticker": req.ticker,
@@ -162,6 +178,8 @@ def analyze_stock(req: AnalysisRequest):
         news_context = req.news_context
         if not news_context:
             try:
+                if news_engine is None:
+                    news_engine = NewsEngine()
                 news_context, _ = news_engine.fetch_company_news(resolved_ticker)
             except:
                 news_context = "Market conditions normal"
@@ -169,20 +187,13 @@ def analyze_stock(req: AnalysisRequest):
         # LIGHT RULES
         rules = ["Technical indicators applied"]
 
-        # MODEL PREDICTION
-        if scaler and model:
-            pred_class, conf, weights = predict_signal(model, df, rules, None, scaler)
-        else:
-            return {
-                "ticker": req.ticker,
-                "signal_class": "HOLD",
-                "confidence": 0.5,
-                "rules_triggered": ["Model not ready"],
-                "sentiment": "neutral"
-            }
+        # MODEL
+        pred_class, conf, weights = predict_signal(model, df, rules, None, scaler)
 
-        # SENTIMENT (safe)
+        # SENTIMENT
         try:
+            if sentiment_engine is None:
+                sentiment_engine = SentimentEngine()
             sentiment = sentiment_engine.analyze(news_context)
         except:
             sentiment = "neutral"
@@ -197,7 +208,7 @@ def analyze_stock(req: AnalysisRequest):
         }
 
     except Exception as e:
-        # ✅ NEVER FAIL → ALWAYS RETURN
+        # ✅ NEVER FAIL (prevents 502)
         return {
             "ticker": req.ticker,
             "signal_class": "HOLD",
@@ -210,7 +221,9 @@ def analyze_stock(req: AnalysisRequest):
 
 @app.post("/chat")
 def chat_analyst(req: ChatRequest):
-    return {"response": "Chat disabled on free tier to save memory"}
+    return {
+        "response": "Chat disabled on free tier to save memory"
+    }
 
 
 @app.get("/metrics")
